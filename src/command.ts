@@ -1,15 +1,20 @@
 import type {Argument, InferArgument} from "./argument.ts"
-import type {Flag} from "./flag.ts"
+import type {Flag, InferFlag} from "./flag.ts"
 import type {InferOption, Option} from "./option.ts"
 
 export type Handler<
+	TFlagResults extends Record<string, boolean>,
 	TOptionResults extends Record<string, unknown>,
 	TArgumentResults extends unknown[],
 > = (
+	flags: TFlagResults,
 	options: TOptionResults,
 	...arguments_: TArgumentResults
 ) => Promise<void> | void
 
+export type InferFlags<out TFlags extends Record<string, Flag>> = {
+	[K in keyof TFlags]: InferFlag<TFlags[K]>
+}
 export type InferOptions<out TOptions extends Record<string, Option<unknown>>> =
 	{
 		[K in keyof TOptions]: InferOption<TOptions[K]>
@@ -66,6 +71,7 @@ export type Command<
 	}
 	arguments?: TArguments
 	handler?: Handler<
+		InferFlags<TFlags>,
 		InferOptions<TOptions>,
 		InferArguments<TArguments>
 	>

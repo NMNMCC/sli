@@ -2,6 +2,12 @@ import {command, subcommand} from "./command.ts"
 
 export default command({
 	description: "An example command",
+	flags: {
+		verbose: {
+			description: "Enable verbose mode",
+			fallback: false,
+		},
+	},
 	options: {
 		option1: {
 			description: "The first option",
@@ -39,7 +45,7 @@ export default command({
 			},
 		}),
 	},
-	handler: ({option1, option2}, arg1) => {
-		console.log(option1, option2, arg1)
+	handler: ({verbose}, {option1, option2}, arg1) => {
+		console.log(verbose, option1, option2, arg1)
 	},
 })

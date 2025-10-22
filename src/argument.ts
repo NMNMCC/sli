@@ -1,7 +1,6 @@
 export type Argument<out T> = {
 	name: string
 	description: string
-	required?: boolean
 	transformer: (input: string) => Promise<T> | T
 }
 

@@ -1,79 +1,94 @@
 import {table} from "./table.ts"
-import type {Argument} from "./argument.ts"
-import type {Command, Subcommand} from "./command.ts"
-import type {Flag} from "./flag.ts"
 import type {Option} from "./option.ts"
+import type {Command, Subcommand} from "./command.ts"
+import type {Argument} from "./argument.ts"
+import type {Flag} from "./flag.ts"
 
 export function help<
-	TSubCommands extends Record<string, Subcommand>,
-	TFlags extends Record<string, Flag>,
-	TOptions extends Record<string, Option<unknown>>,
-	TArguments extends Argument<unknown>[],
+	const TSubCommands extends Record<string, Subcommand>,
+	const TFlags extends Record<string, Flag>,
+	const TOptions extends Record<string, Option<unknown>>,
+	const TArguments extends Argument<unknown>[],
 >(
 	title: string,
-	command: Command<TSubCommands, TFlags, TOptions, TArguments>,
+	c: Command<TSubCommands, TFlags, TOptions, TArguments>,
 ): string {
-	const parentFlags = (command.flags ?? {}) as TFlags
-	const parentOptions = (command.options ?? {}) as TOptions
-	const parentArguments = (command.arguments ?? []) as TArguments
-
-	const subcommandsSection = command.subcommands
-		? "Commands:\n" +
+	return [
+		title,
+		c.description,
+		"\n",
+		"subcommands" in c && c.subcommands &&
+		"Commands:\n" +
 			table(
 				"row",
-				Object.entries(command.subcommands).map<[string, string]>(
-					([key, build]) => [
-						key,
-						build(
-							parentFlags,
-							parentOptions,
-							...parentArguments,
-						)
-							.description ??
-							"",
-					],
-				),
+				Object.entries(c.subcommands).map<[string, string]>((
+					[key, value],
+				) => [
+					key,
+					value(
+						c.flags || {},
+						c.options || {},
+						...(c.arguments || []),
+					)
+						.description ||
+					"",
+				]),
 				"\t",
 				"\t",
 				"\t",
-			)
-		: undefined
-
-	const optionsSection = command.options
-		? "Options:\n" +
+			),
+		"flags" in c && c.flags &&
+		"Flags:\n" +
 			table(
 				"row",
-				Object.entries(command.options).map<[string, string]>(
-					([key, value]) => [key, value.description],
-				),
-				"\t",
-				"\t",
-				"\t",
-			)
-		: undefined
-
-	const argumentsSection = command.arguments
-		? "Arguments:\n" +
-			table(
-				"row",
-				command.arguments.map<[string, string]>((value, index) => [
-					`<${index}:${value.name}>`,
+				Object.entries(c.flags).map<[string, string, string]>((
+					[key, value],
+				) => [
+					[
+						...Object.entries(c.alias?.flags ?? {}).filter((
+							[, value],
+						) => value === key).map(([key]) => `-${key}`),
+						`--${key}`,
+					].join(", "),
+					String(value.fallback),
 					value.description,
 				]),
 				"\t",
 				"\t",
 				"\t",
-			)
-		: undefined
-
-	return [
-		title,
-		command.description,
-		"\n",
-		subcommandsSection,
-		optionsSection,
-		argumentsSection,
-	]
-		.filter(Boolean)
-		.join("\n") + "\n"
+			),
+		"options" in c && c.options &&
+		"Options:\n" +
+			table(
+				"row",
+				Object.entries(c.options).map<[string, string]>((
+					[key, value],
+				) => [
+					[
+						...Object.entries(c.alias?.options ?? {}).filter((
+							[, value],
+						) => value === key).map(([key]) => `-${key}`),
+						`--${key}`,
+					].join(", "),
+					(value as Option<unknown>).description,
+				]),
+				"\t",
+				"\t",
+				"\t",
+			),
+		"arguments" in c && c.arguments &&
+		"Arguments:\n" +
+			table(
+				"row",
+				(c.arguments as Argument<unknown>[]).map<
+					[string, string, string]
+				>((
+					value,
+					index,
+				) => [String(index), `<${value.name}>`, value.description]),
+				"\t",
+				"\t",
+				"\t",
+			),
+	].filter(Boolean).join("\n") + "\n"
 }
