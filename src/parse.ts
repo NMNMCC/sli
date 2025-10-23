@@ -1,11 +1,24 @@
 import {type Command, command} from "./command.ts"
 import type {CommandResultEntry, InferCommands} from "./result.ts"
-import {type Merge, merge} from "./util.ts"
-import minimist from "minimist"
+import type {Merge} from "./util.ts"
 
 class UnknownParameter extends Error {
-	constructor(parameter: string) {
-		super(`unknown parameter ${parameter}`)
+	constructor(context: unknown, parameter: string) {
+		super(`unknown parameter ${parameter}\n${JSON.stringify(context)}\n`)
+	}
+}
+class InvalidShortOption extends Error {
+	constructor(context: unknown, option: string) {
+		super(`invalid short option ${option}\n${JSON.stringify(context)}\n`)
+	}
+}
+class MissingRequiredParameter extends Error {
+	constructor(context: unknown, option: string) {
+		super(
+			`missing required parameter ${option}\n${
+				JSON.stringify(context)
+			}\n`,
+		)
 	}
 }
 
@@ -18,9 +31,22 @@ const helper = command({
 	},
 })
 
+type Context = [string, {
+	flags: Record<string, boolean>
+	options: Record<string, unknown[]>
+	arguments: unknown[]
+	raw: string
+}]
+
 export const parse = async <const TCommand extends Command>(
 	argv: string[],
-	cmd: TCommand,
+	command: TCommand,
+	[path, data]: Context = ["", {
+		flags: {},
+		options: {},
+		arguments: [],
+		raw: "",
+	}],
 ): Promise<
 	CommandResultEntry<
 		InferCommands<
@@ -31,168 +57,126 @@ export const parse = async <const TCommand extends Command>(
 		>
 	>
 > => {
-	const result: {
-		flags: Record<string, boolean>
-		options: Record<string, unknown | unknown[]>
-		arguments: unknown[]
-		raw: string
-	} = {
-		flags: {},
-		options: {},
-		arguments: [],
-		raw: "",
-	}
+	const [head, ...tail] = argv
 
-	const commands: string[] = []
-	let c: Command = merge(helper, cmd)
-	for (let i = 0; i < argv.length; i++) {
-		const is = (type: "flags" | "options" | "commands", key: string) =>
-			!c[type] ? false : Object.keys(c[type]).includes(key)
-		const expand = (
-			type: "flags" | "options" | "commands",
-			short: string,
-		): string | undefined => c.alias?.[type]?.[short]
-
-		const arg = argv[i]
-
-		if (arg === "--") {
-			result.raw = argv.slice(i).join(" ")
-			break
+	if (!head) {
+		for (const [key, value] of Object.entries(command.options ?? {})) {
+			// check required option
+			if (!data.options[key]) {
+				throw new MissingRequiredParameter({path, data, command}, key)
+			}
+			// apply option fallback
+			if (!value.multiple) {
+				data.options[key] = data.options[key].at(-1) as never
+			}
 		}
 
-		if (arg[0] === "-") {
-			const alias: Record<string, string[] | string> = {}
-			const booleans: string[] = []
-			const strings: string[] = []
-
-			if (c.flags) {
-				for (const k of Object.keys(c.flags)) {
-					booleans.push(k)
-				}
-				if (c.alias?.flags) {
-					for (const [short, long] of Object.entries(c.alias.flags)) {
-						alias[long] = Array.isArray(alias[long])
-							? [...(alias[long] as string[]), short]
-							: [short]
-						alias[short] = Array.isArray(alias[short])
-							? [...(alias[short] as string[]), long]
-							: [long]
-						booleans.push(short)
-					}
-				}
-			}
-
-			if (c.options) {
-				for (const k of Object.keys(c.options)) {
-					strings.push(k)
-				}
-				if (c.alias?.options) {
-					for (
-						const [short, long] of Object.entries(c.alias.options)
-					) {
-						alias[long] = Array.isArray(alias[long])
-							? [...(alias[long] as string[]), short]
-							: [short]
-						alias[short] = Array.isArray(alias[short])
-							? [...(alias[short] as string[]), long]
-							: [long]
-						strings.push(short)
-					}
-				}
-			}
-
-			const slice = [
-				arg,
-				...(argv[i + 1] !== undefined ? [argv[i + 1]] : []),
-			]
-			const parsed = minimist(slice, {
-				alias,
-				boolean: booleans,
-				string: strings,
-			})
-			const keys = Object.keys(parsed).filter((k) =>
-				k !== "_" && k !== "--"
-			)
-
-			if (keys.length === 0) {
-				throw new UnknownParameter(arg)
-			}
-
-			let consumedNext = false
-			const seen = new Set<string>()
-
-			for (const k of keys) {
-				// resolve to canonical key within current command context
-				let key = k
-				if (!is("flags", key) && !is("options", key)) {
-					const real = expand("flags", key) ?? expand("options", key)
-					if (!real) {
-						throw new UnknownParameter(arg)
-					}
-					key = real
-				}
-				if (seen.has(key)) {
-					continue
-				}
-				seen.add(key)
-
-				if (is("flags", key)) {
-					result.flags[key] = true
-					continue
-				}
-
-				if (is("options", key)) {
-					const option = c.options![key]
-					const transformer = option.transformer ?? ((v: string) => v)
-
-					let rawValue: string
-					if (parsed[k] === true && !arg.includes("=")) {
-						rawValue = String(argv[i + 1])
-						consumedNext = argv[i + 1] !== undefined || consumedNext
-					} else {
-						rawValue = String(parsed[k])
-					}
-
-					if (option.multiple) {
-						result.options[key] = result.options[key] ?? []
-						const values = result.options[key] as unknown[]
-						values.push(await transformer(rawValue))
-						continue
-					}
-
-					result.options[key] = await transformer(rawValue)
-					continue
-				}
-
-				throw new UnknownParameter(arg)
-			}
-
-			if (consumedNext) {
-				i++
-			}
-			continue
+		for (const [key, value] of Object.entries(command.flags ?? {})) {
+			data.flags[key] = data.flags[key] ?? value.fallback
 		}
 
-		const maybe = expand("commands", arg) ?? arg
-		if (is("commands", maybe)) {
-			commands.push(maybe)
-			c = merge(helper, c.commands![maybe])
+		return [path, data, command] as never
+	} else if (head === "--") {
+		data.raw = tail.slice(1).join(" ")
+		return await parse([], command, [path, data])
+	} else if (!head.startsWith("-")) {
+		const candidate = command.commands?.[head]
+		if (!candidate) {
+			// maybe it is a short command?
+			const _command = command.commands
+				?.[command.alias?.commands?.[head] ?? ""]
+			if (_command) {
+				return await parse(
+					tail,
+					_command,
+					[path, data],
+				) as never
+			}
 
-			continue
+			// maybe it is an argument?
+			if (
+				data.arguments.length >= (command.arguments?.length ?? 0)
+			) {
+				throw new UnknownParameter({path, data, command}, head)
+			}
+
+			data.arguments.push(head)
+			return await parse(tail, command, [path, data])
 		}
 
-		if (!c.arguments || result.arguments.length >= c.arguments.length) {
-			throw new UnknownParameter(arg)
+		return await parse(tail, candidate, [
+			[path, head].join(" ").trim(),
+			data,
+		]) as never
+	} else if (!head.startsWith("--")) {
+		const keys = head.slice(1).split("")
+
+		for (const [idx, key] of keys.entries()) {
+			const candidate = command.alias?.flags?.[key]
+			if (!candidate) {
+				// maybe it is an option?
+				const option = command.alias?.options?.[key]
+				if (!option) {
+					throw new UnknownParameter({path, data, command}, head)
+				}
+
+				if (idx !== keys.length - 1) {
+					// short option can only be placed at the end
+					throw new InvalidShortOption({path, data, command}, option)
+				}
+
+				return await parse(
+					[`--${option}`, ...tail],
+					command,
+					[path, data],
+				)
+			}
+
+			data.flags[candidate] = true
 		}
 
-		result.arguments.push(
-			await c.arguments[result.arguments.length].transformer(arg),
+		return await parse(
+			tail,
+			command,
+			[path, data],
 		)
-	}
+	} else {
+		const key = head.slice(2)
+		const candidateCommand = command.flags?.[key]
+		if (!candidateCommand) {
+			// maybe it is a flag alias?
+			const _flag = command.alias?.flags?.[key]
+			if (_flag) {
+				return await parse([`--${_flag}`, ...tail], command, [
+					path,
+					data,
+				])
+			}
 
-	return [
-		commands.join(" "),
-		result,
-		c,
-	] as never
+			// maybe it ts an option?
+			const optionCommand = command.options?.[key]
+			if (!optionCommand) {
+				// maybe it is a option alias?
+				const _option = command.alias?.options?.[key]
+				if (_option) {
+					return await parse([`--${key}`, ...tail], command, [
+						path,
+						data,
+					])
+				}
+				throw new UnknownParameter({path, data, command}, head)
+			}
+
+			const transformer = optionCommand.transformer ?? ((s: string) => s)
+			const [value, ..._] = tail
+			data.options[key] = [
+				...(data.options[key] ?? []),
+				transformer(value),
+			]
+			return await parse(_, command, [path, data])
+		}
+
+		data.flags[key] = true
+		return await parse(tail, command, [path, data])
+	}
 }
