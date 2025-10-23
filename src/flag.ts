@@ -1,6 +1,6 @@
 export type Flag = {
 	description?: string
-	fallback: boolean
+	default: boolean
 }
 
 export type InferFlag<_T extends Flag> = boolean

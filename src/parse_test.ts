@@ -1,4 +1,4 @@
-import {parse} from "./parse.ts"
+import {MissingRequiredParameter, parse} from "./parse.ts"
 import {command} from "./command.ts"
 import {assertEquals, assertRejects} from "@std/assert"
 import {help} from "./help.ts"
@@ -9,7 +9,7 @@ Deno.test("parse without subcommand", async () => {
 		flags: {
 			verbose: {
 				description: "Enable verbose output",
-				fallback: false,
+				default: false,
 			},
 		},
 	})
@@ -25,7 +25,7 @@ Deno.test("parse with subcommand", async () => {
 		flags: {
 			verbose: {
 				description: "Enable verbose output",
-				fallback: false,
+				default: false,
 			},
 		},
 		alias: {
@@ -39,7 +39,7 @@ Deno.test("parse with subcommand", async () => {
 				flags: {
 					force: {
 						description: "Force start the service",
-						fallback: false,
+						default: false,
 					},
 				},
 			},
@@ -53,12 +53,14 @@ Deno.test("parse with subcommand", async () => {
 			assertEquals(d, {
 				arguments: [],
 				flags: {
+					help: false,
+					verbose: false,
 					force: true,
 				},
 				options: {},
 				raw: "",
 			})
-			console.log(help("test", c))
+			console.log(help(c))
 			break
 	}
 })
@@ -67,9 +69,9 @@ Deno.test("parse multiple combined short flags", async () => {
 	const cmd = command({
 		description: "Test command with multiple flags",
 		flags: {
-			verbose: {description: "Verbose output", fallback: false},
-			debug: {description: "Debug mode", fallback: false},
-			force: {description: "Force operation", fallback: false},
+			verbose: {description: "Verbose output", default: false},
+			debug: {description: "Debug mode", default: false},
+			force: {description: "Force operation", default: false},
 		},
 		alias: {
 			flags: {
@@ -91,8 +93,8 @@ Deno.test("parse flags with alias resolution", async () => {
 	const cmd = command({
 		description: "Test command with flag aliases",
 		flags: {
-			"all": {description: "Show all", fallback: false},
-			"recursive": {description: "Recursive", fallback: false},
+			"all": {description: "Show all", default: false},
+			"recursive": {description: "Recursive", default: false},
 		},
 		alias: {
 			flags: {
@@ -112,9 +114,9 @@ Deno.test("parse mixed short and long flags", async () => {
 	const cmd = command({
 		description: "Test mixed flags",
 		flags: {
-			verbose: {description: "Verbose", fallback: false},
-			debug: {description: "Debug", fallback: false},
-			quiet: {description: "Quiet", fallback: false},
+			verbose: {description: "Verbose", default: false},
+			debug: {description: "Debug", default: false},
+			quiet: {description: "Quiet", default: false},
 		},
 		alias: {
 			flags: {
@@ -131,19 +133,17 @@ Deno.test("parse mixed short and long flags", async () => {
 	assertEquals(data.flags.quiet, true)
 })
 
-Deno.test("parse options with transformers", async () => {
+Deno.test("parse options with parsers", async () => {
 	const cmd = command({
-		description: "Test command with option transformers",
+		description: "Test command with option parsers",
 		options: {
 			count: {
 				description: "Number of iterations",
-				fallback: 1,
-				transformer: parseInt,
+				parser: (s?: string) => s ? parseInt(s, 10) : 1,
 			},
 			enabled: {
 				description: "Enable feature",
-				fallback: false,
-				transformer: (s: string) => s.toLowerCase() === "true",
+				parser: (s?: string) => s ? s.toLowerCase() === "true" : false,
 			},
 		},
 		alias: {
@@ -169,11 +169,11 @@ Deno.test("parse multiple-value options", async () => {
 			files: {
 				description: "List of files",
 				multiple: true,
-				fallback: [],
+				parser: (s) => s ?? "",
 			},
 			single: {
 				description: "Single value",
-				fallback: "default",
+				parser: (s) => s ?? "default",
 			},
 		},
 	})
@@ -201,7 +201,7 @@ Deno.test("parse options with short aliases", async () => {
 		options: {
 			output: {
 				description: "Output file",
-				fallback: "out.txt",
+				parser: (s) => s ?? "out.txt",
 			},
 			input: {
 				description: "Input file",
@@ -232,7 +232,7 @@ Deno.test("parse options with special characters in values", async () => {
 			},
 			path: {
 				description: "File path",
-				fallback: "/default/path",
+				parser: (s) => s ?? "/default/path",
 			},
 		},
 	})
@@ -248,24 +248,24 @@ Deno.test("parse options with special characters in values", async () => {
 	assertEquals(data.options.path, "/path/with spaces/file.txt")
 })
 
-Deno.test("parse multiple arguments with transformers", async () => {
+Deno.test("parse multiple arguments with parsers", async () => {
 	const cmd = command({
 		description: "Test command with arguments",
 		arguments: [
 			{
 				name: "source",
 				description: "Source file",
-				transformer: (s: string) => s.trim(),
+				parser: (s: string) => s.trim(),
 			},
 			{
 				name: "destination",
 				description: "Destination file",
-				transformer: (s: string) => s.trim(),
+				parser: (s: string) => s.trim(),
 			},
 			{
 				name: "mode",
 				description: "Copy mode",
-				transformer: (s: string) => s.trim(),
+				parser: (s: string) => s.trim(),
 			},
 		],
 	})
@@ -279,24 +279,24 @@ Deno.test("parse arguments mixed with flags and options", async () => {
 	const cmd = command({
 		description: "Test mixed arguments and options",
 		flags: {
-			verbose: {description: "Verbose", fallback: false},
+			verbose: {description: "Verbose", default: false},
 		},
 		options: {
 			mode: {
 				description: "Operation mode",
-				fallback: "default",
+				parser: (s) => s ?? "default",
 			},
 		},
 		arguments: [
 			{
 				name: "source",
 				description: "Source",
-				transformer: (s: string) => s,
+				parser: (s: string) => s,
 			},
 			{
 				name: "destination",
 				description: "Destination",
-				transformer: (s: string) => s,
+				parser: (s: string) => s,
 			},
 		],
 		alias: {
@@ -326,19 +326,14 @@ Deno.test("error: too many arguments", async () => {
 			{
 				name: "single",
 				description: "Single argument",
-				transformer: (s: string) => s,
+				parser: (s: string) => s,
 			},
 		],
 	})
 
-	await assertRejects(
-		() => parse(["arg1", "arg2"], cmd),
-		Error,
-		"unknown parameter arg2",
-	)
+	const [, , , error] = await parse(["arg1", "arg2"], cmd)
+	assertEquals(error?.message, "unknown parameter arg2")
 })
-
-// ===== COMMAND NAVIGATION WITH ALIASES =====
 
 Deno.test("parse nested subcommands with aliases", async () => {
 	const containerCmd = command({
@@ -349,7 +344,7 @@ Deno.test("parse nested subcommands with aliases", async () => {
 				flags: {
 					"with-volume": {
 						description: "Create with volume",
-						fallback: false,
+						default: false,
 					},
 				},
 			},
@@ -395,7 +390,7 @@ Deno.test("parse deep command hierarchy", async () => {
 								flags: {
 									flag: {
 										description: "A flag",
-										fallback: false,
+										default: false,
 									},
 								},
 							},
@@ -411,19 +406,17 @@ Deno.test("parse deep command hierarchy", async () => {
 	assertEquals(path, "level1 level2 action")
 })
 
-// ===== SPECIAL PARSING SCENARIOS =====
-
 Deno.test("parse with -- delimiter for raw text", async () => {
 	const cmd = command({
 		description: "Test command with raw text",
 		flags: {
-			verbose: {description: "Verbose", fallback: false},
+			verbose: {description: "Verbose", default: false},
 		},
 		arguments: [
 			{
 				name: "command",
 				description: "Command to run",
-				transformer: (s: string) => s,
+				parser: (s: string) => s,
 			},
 		],
 	})
@@ -447,7 +440,7 @@ Deno.test("parse empty input", async () => {
 	const cmd = command({
 		description: "Test command with no input",
 		flags: {
-			flag: {description: "A flag", fallback: false},
+			flag: {description: "A flag", default: false},
 		},
 	})
 
@@ -464,7 +457,7 @@ Deno.test("parse command with -- at start", async () => {
 			{
 				name: "action",
 				description: "Action",
-				transformer: (s: string) => s,
+				parser: (s: string) => s,
 			},
 		],
 	})
@@ -475,44 +468,36 @@ Deno.test("parse command with -- at start", async () => {
 	assertEquals(data.raw, "something --debug")
 })
 
-// ===== ERROR CONDITIONS =====
-
 Deno.test("error: unknown flag", async () => {
 	const cmd = command({
 		description: "Test command",
 		flags: {
-			known: {description: "Known flag", fallback: false},
+			known: {description: "Known flag", default: false},
 		},
 	})
 
-	await assertRejects(
-		() => parse(["--unknown"], cmd),
-		Error,
-		"unknown parameter --unknown",
-	)
+	const [, , , error] = await parse(["--unknown"], cmd)
+	assertEquals(error?.message, "unknown parameter --unknown")
 })
 
 Deno.test("error: unknown short flag combination", async () => {
 	const cmd = command({
 		description: "Test command",
 		flags: {
-			a: {description: "Flag a", fallback: false},
+			a: {description: "Flag a", default: false},
 		},
 	})
 
-	await assertRejects(
-		() => parse(["-ab"], cmd),
-		Error,
-		"unknown parameter -ab",
-	)
+	const [, , , error] = await parse(["-ab"], cmd)
+	assertEquals(error?.message, "unknown parameter -ab")
 })
 
 Deno.test("error: invalid short option placement", async () => {
 	const cmd = command({
 		description: "Test command",
 		flags: {
-			all: {description: "All flag", fallback: false},
-			verbose: {description: "Verbose flag", fallback: false},
+			all: {description: "All flag", default: false},
+			verbose: {description: "Verbose flag", default: false},
 		},
 		options: {
 			output: {
@@ -549,11 +534,9 @@ Deno.test("error: missing required option", async () => {
 		},
 	})
 
-	await assertRejects(
-		() => parse([], cmd),
-		Error,
-		"missing required parameter required",
-	)
+	const [, , , error] = await parse([], cmd)
+
+	assertEquals(error instanceof MissingRequiredParameter, true)
 })
 
 Deno.test("error: unknown subcommand", async () => {
@@ -566,26 +549,21 @@ Deno.test("error: unknown subcommand", async () => {
 		},
 	})
 
-	await assertRejects(
-		() => parse(["unknown"], cmd),
-		Error,
-		"unknown parameter unknown",
-	)
+	const [, , , error] = await parse(["unknown"], cmd)
+	assertEquals(error?.message, "unknown parameter unknown")
 })
-
-// ===== COMPLEX REAL-WORLD SCENARIOS =====
 
 Deno.test("parse complex git-like command", async () => {
 	const commitCmd = command({
 		description: "Record changes",
 		flags: {
-			all: {description: "Stage all changes", fallback: false},
-			amend: {description: "Amend previous commit", fallback: false},
+			all: {description: "Stage all changes", default: false},
+			amend: {description: "Amend previous commit", default: false},
 		},
 		options: {
 			message: {
 				description: "Commit message",
-				fallback: "",
+				parser: (s) => s ?? "",
 			},
 		},
 		alias: {
@@ -604,12 +582,12 @@ Deno.test("parse complex git-like command", async () => {
 			{
 				name: "remote",
 				description: "Remote name",
-				transformer: (s: string) => s,
+				parser: (s: string) => s,
 			},
 			{
 				name: "branch",
 				description: "Branch name",
-				transformer: (s: string) => s,
+				parser: (s: string) => s,
 			},
 		],
 	})
@@ -617,7 +595,7 @@ Deno.test("parse complex git-like command", async () => {
 	const gitCmd = command({
 		description: "Git-like version control",
 		flags: {
-			quiet: {description: "Suppress output", fallback: false},
+			quiet: {description: "Suppress output", default: false},
 		},
 		alias: {
 			flags: {
@@ -660,25 +638,25 @@ Deno.test("parse docker-like command with complex structure", async () => {
 	const runCmd = command({
 		description: "Run a container",
 		flags: {
-			detach: {description: "Run in background", fallback: false},
-			interactive: {description: "Interactive mode", fallback: false},
-			tty: {description: "Allocate TTY", fallback: false},
-			rm: {description: "Remove container on exit", fallback: false},
+			detach: {description: "Run in background", default: false},
+			interactive: {description: "Interactive mode", default: false},
+			tty: {description: "Allocate TTY", default: false},
+			rm: {description: "Remove container on exit", default: false},
 		},
 		options: {
 			name: {
 				description: "Container name",
-				fallback: "",
+				parser: (s) => s ?? "",
 			},
 			port: {
 				description: "Port mapping",
 				multiple: true,
-				fallback: [],
+				parser: (s) => s ?? "",
 			},
 			env: {
 				description: "Environment variable",
 				multiple: true,
-				fallback: [],
+				parser: (s) => s ?? "",
 			},
 		},
 		alias: {
@@ -696,12 +674,12 @@ Deno.test("parse docker-like command with complex structure", async () => {
 			{
 				name: "image",
 				description: "Container image",
-				transformer: (s: string) => s,
+				parser: (s: string) => s,
 			},
 			{
 				name: "command",
 				description: "Command to run",
-				transformer: (s: string) => s,
+				parser: (s: string) => s,
 			},
 		],
 	})
@@ -749,15 +727,14 @@ Deno.test("parse npm-like command with scripts", async () => {
 		options: {
 			"save-dev": {
 				description: "Save as dev dependency",
-				fallback: false,
-				transformer: (s: string) => s === "true",
+				parser: (s?: string) => s ? s === "true" : false,
 			},
 		},
 		arguments: [
 			{
 				name: "packages",
 				description: "Package names",
-				transformer: (s: string) => s,
+				parser: (s: string) => s,
 			},
 		],
 	})
@@ -768,7 +745,7 @@ Deno.test("parse npm-like command with scripts", async () => {
 			{
 				name: "script",
 				description: "Script name",
-				transformer: (s: string) => s,
+				parser: (s: string) => s,
 			},
 		],
 	})
@@ -776,7 +753,7 @@ Deno.test("parse npm-like command with scripts", async () => {
 	const npmCmd = command({
 		description: "NPM-like package manager",
 		flags: {
-			silent: {description: "Silent operation", fallback: false},
+			silent: {description: "Silent operation", default: false},
 		},
 		alias: {
 			flags: {

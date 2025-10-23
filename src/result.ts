@@ -2,7 +2,7 @@ import type {Command, InferCommand} from "./command.ts"
 import type {Flag, InferFlag} from "./flag.ts"
 import type {InferOption, Option} from "./option.ts"
 import type {Argument, InferArgument} from "./argument.ts"
-import type {String} from "./util.ts"
+import type {Merge, String} from "./util.ts"
 
 export type Flags = Record<string, Flag>
 export type Options = Record<string, Option<unknown>>
@@ -41,14 +41,16 @@ export type FromCommandPath<
 	T,
 	P extends string,
 > = P extends "" ? T
-	: T extends {commands?: infer C}
-		? C extends Record<string, Command>
-			? P extends `${infer K} ${infer Rest}`
-				? K extends keyof C ? FromCommandPath<C[K], Rest>
+	: T extends {commands?: infer C} ? Merge<
+			T,
+			C extends Record<string, Command>
+				? P extends `${infer K} ${infer Rest}`
+					? K extends keyof C ? FromCommandPath<C[K], Rest>
+					: never
+				: P extends keyof C ? C[P]
 				: never
-			: P extends keyof C ? C[P]
-			: never
-		: never
+				: never
+		>
 	: never
 
 export type InferCommands<T extends Command> = {

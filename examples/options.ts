@@ -1,18 +1,17 @@
 import {command, option, parse} from "../mod.ts"
 
 const app = command({
-	description: "Options (required, fallback, transformers)",
+	description: "Options (required, parser, transformers)",
 	options: {
 		count: option({
 			description: "How many",
-			fallback: 1,
-			transformer: (s: string) => parseInt(s, 10),
+			parser: (s?: string) => s ? parseInt(s, 10) : 1,
 		}),
 		mode: option({description: "Mode", required: true}),
 		tag: option({
 			description: "Repeatable tag",
 			multiple: true,
-			fallback: [],
+			parser: (s?: string) => s ?? "",
 		}),
 	},
 	alias: {options: {c: "count", m: "mode", t: "tag"}},

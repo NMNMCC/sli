@@ -7,7 +7,7 @@ const user = command({
 	commands: {
 		add: command({
 			description: "Add a user",
-			flags: {admin: {description: "Admin role", fallback: false}},
+			flags: {admin: {description: "Admin role", default: false}},
 			options: {
 				name: option({description: "User name", required: true}),
 				email: option({description: "Email", required: true}),
@@ -27,7 +27,7 @@ const user = command({
 		delete: command({
 			description: "Delete a user",
 			flags: {
-				confirm: {description: "Confirm deletion", fallback: false},
+				confirm: {description: "Confirm deletion", default: false},
 			},
 			arguments: [
 				argument({
@@ -40,7 +40,7 @@ const user = command({
 		}),
 		list: command({
 			description: "List users",
-			flags: {verbose: {description: "Verbose", fallback: false}},
+			flags: {verbose: {description: "Verbose", default: false}},
 			options: {
 				filter: option({
 					description: "Filter",
@@ -83,13 +83,16 @@ const deploy = command({
 	commands: {
 		prod: command({
 			description: "Deploy to production",
-			flags: {force: {description: "Force deploy", fallback: false}},
+			flags: {force: {description: "Force deploy", default: false}},
 			options: {
-				region: option({description: "Region", fallback: "us-east-1"}),
+				region: option({
+					description: "Region",
+					parser: (s?: string) => s ?? "us-east-1",
+				}),
 				tag: option({
 					description: "Tags",
 					multiple: true,
-					fallback: [],
+					parser: (s?: string) => s ?? "",
 				}),
 			},
 			alias: {options: {r: "region", t: "tag"}, flags: {f: "force"}},
@@ -97,7 +100,10 @@ const deploy = command({
 		staging: command({
 			description: "Deploy to staging",
 			options: {
-				region: option({description: "Region", fallback: "us-west-2"}),
+				region: option({
+					description: "Region",
+					parser: (s?: string) => s ?? "us-west-2",
+				}),
 			},
 			alias: {options: {r: "region"}},
 		}),
@@ -110,7 +116,7 @@ const project = command({
 	commands: {
 		create: command({
 			description: "Create a project",
-			flags: {private: {description: "Private repo", fallback: false}},
+			flags: {private: {description: "Private repo", default: false}},
 			options: {
 				template: option({
 					description: "Template",

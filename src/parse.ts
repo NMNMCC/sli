@@ -1,24 +1,32 @@
 import {type Command, command} from "./command.ts"
 import type {CommandResultEntry, InferCommands} from "./result.ts"
-import type {Merge} from "./util.ts"
+import {type Merge, merge} from "./util.ts"
 
-class UnknownParameter extends Error {
-	constructor(context: unknown, parameter: string) {
-		super(`unknown parameter ${parameter}\n${JSON.stringify(context)}\n`)
+export class UnknownParameter extends Error {
+	constructor(parameter: string) {
+		super(`unknown parameter ${parameter}`)
 	}
 }
-class InvalidShortOption extends Error {
-	constructor(context: unknown, option: string) {
-		super(`invalid short option ${option}\n${JSON.stringify(context)}\n`)
+export class InvalidShortOption extends Error {
+	constructor(option: string) {
+		super(`invalid short option ${option}`)
 	}
 }
-class MissingRequiredParameter extends Error {
-	constructor(context: unknown, option: string) {
+export class MissingRequiredParameter extends Error {
+	constructor(option: string) {
 		super(
-			`missing required parameter ${option}\n${
-				JSON.stringify(context)
-			}\n`,
+			`missing required parameter ${option}`,
 		)
+	}
+}
+export class MissingOptionValue extends Error {
+	constructor(option: string) {
+		super(`missing option value ${option}`)
+	}
+}
+export class MissingParser extends Error {
+	constructor(option: string) {
+		super(`missing parser ${option}`)
 	}
 }
 
@@ -26,14 +34,14 @@ const helper = command({
 	flags: {
 		help: {
 			description: "Display help information about the command",
-			fallback: false,
+			default: false,
 		},
 	},
 }) as {
-	flags: {
-		help: {
-			description: "Display help information about the command"
-			fallback: false
+	readonly flags: {
+		readonly help: {
+			readonly description: "Display help information about the command"
+			readonly default: false
 		}
 	}
 }
@@ -43,46 +51,66 @@ type Context = [string, {
 	options: Record<string, unknown[]>
 	arguments: unknown[]
 	raw: string
-}]
+}, error?: Error]
 
 export const parse = async <const TCommand extends Command>(
 	argv: string[],
-	command: TCommand,
-	[path, data]: Context = ["", {
+	cmd: TCommand,
+	[path, data, error]: Context = ["", {
 		flags: {},
 		options: {},
 		arguments: [],
 		raw: "",
 	}],
 ): Promise<
-	CommandResultEntry<
-		InferCommands<
-			Merge<
-				typeof helper,
-				TCommand
+	[
+		...CommandResultEntry<
+			InferCommands<
+				Merge<
+					typeof helper,
+					TCommand
+				>
 			>
-		>
-	>
+		>,
+		error?: Error,
+	]
 > => {
+	const command = merge(helper, cmd) as TCommand
+
 	const [head, ...tail] = argv
 
 	if (!head) {
 		for (const [key, value] of Object.entries(command.options ?? {})) {
-			// check required option
-			if (!data.options[key]) {
-				throw new MissingRequiredParameter({path, data, command}, key)
+			// check required option and apply defaults
+			if (!data.options[key] || data.options[key].length === 0) {
+				if (value.required) {
+					return [
+						path,
+						data,
+						command,
+						new MissingRequiredParameter(`--${key}`),
+					] as never
+				}
+				if (!value.parser) {
+					return [
+						path,
+						data,
+						command,
+						new MissingParser(`--${key}`),
+					] as never
+				}
+				data.options[key] = await value.parser() as never
 			}
-			// apply option fallback
 			if (!value.multiple) {
 				data.options[key] = data.options[key].at(-1) as never
 			}
 		}
 
 		for (const [key, value] of Object.entries(command.flags ?? {})) {
-			data.flags[key] = data.flags[key] ?? value.fallback
+			data.flags[key] = data.flags[key] ?? value.default
 		}
 
-		return [path, data, command] as never
+		return [path, data, command, error] as never
 	} else if (head === "--") {
 		data.raw = tail.slice(1).join(" ")
 		return await parse([], command, [path, data])
@@ -104,17 +132,22 @@ export const parse = async <const TCommand extends Command>(
 			if (
 				data.arguments.length >= (command.arguments?.length ?? 0)
 			) {
-				throw new UnknownParameter({path, data, command}, head)
+				return await parse([], command, [
+					path,
+					data,
+					new UnknownParameter(head),
+				])
 			}
 
 			data.arguments.push(head)
 			return await parse(tail, command, [path, data])
 		}
 
-		return await parse(tail, candidate, [
-			[path, head].join(" ").trim(),
-			data,
-		]) as never
+		return await parse(
+			tail,
+			merge(cmd, candidate),
+			[[path, head].join(" ").trim(), data],
+		) as never
 	} else if (!head.startsWith("--")) {
 		const keys = head.slice(1).split("")
 
@@ -124,12 +157,20 @@ export const parse = async <const TCommand extends Command>(
 				// maybe it is an option?
 				const option = command.alias?.options?.[key]
 				if (!option) {
-					throw new UnknownParameter({path, data, command}, head)
+					return await parse(
+						[],
+						command,
+						[path, data, new UnknownParameter(head)],
+					)
 				}
 
 				if (idx !== keys.length - 1) {
 					// short option can only be placed at the end
-					throw new InvalidShortOption({path, data, command}, option)
+					return await parse([], command, [
+						path,
+						data,
+						new InvalidShortOption(option),
+					])
 				}
 
 				return await parse(
@@ -171,16 +212,27 @@ export const parse = async <const TCommand extends Command>(
 						data,
 					])
 				}
-				throw new UnknownParameter({path, data, command}, head)
+				return await parse([], command, [
+					path,
+					data,
+					new UnknownParameter(head),
+				])
 			}
 
-			const transformer = optionCommand.transformer ?? ((s: string) => s)
-			const [value, ..._] = tail
+			const parser = optionCommand.parser ?? ((s?: string) => s)
+			const value = tail[0]
+			if (!value) {
+				return await parse([], command, [
+					path,
+					data,
+					new MissingOptionValue(head),
+				])
+			}
 			data.options[key] = [
 				...(data.options[key] ?? []),
-				transformer(value),
+				await parser(value),
 			]
-			return await parse(_, command, [path, data])
+			return await parse(tail.slice(1), command, [path, data])
 		}
 
 		data.flags[key] = true

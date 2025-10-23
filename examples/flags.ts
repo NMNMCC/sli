@@ -1,12 +1,12 @@
-import { command, parse } from "../mod.ts"
+import {command, parse} from "../mod.ts"
 
 const app = command({
 	description: "Flags with aliases",
 	flags: {
-		verbose: { description: "Verbose output", fallback: false },
-		force: { description: "Force", fallback: false },
+		verbose: {description: "Verbose output", default: false},
+		force: {description: "Force", default: false},
 	},
-	alias: { flags: { v: "verbose", f: "force" } },
+	alias: {flags: {v: "verbose", f: "force"}},
 })
 
 const [, data] = await parse(Deno.args, app)
