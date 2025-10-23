@@ -1,5 +1,5 @@
 export type Flag = {
-	description: string
+	description?: string
 	fallback: boolean
 }
 

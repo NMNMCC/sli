@@ -29,7 +29,14 @@ const helper = command({
 			fallback: false,
 		},
 	},
-})
+}) as {
+	flags: {
+		help: {
+			description: "Display help information about the command"
+			fallback: false
+		}
+	}
+}
 
 type Context = [string, {
 	flags: Record<string, boolean>

@@ -1,6 +1,8 @@
 export type String<T> = T extends infer U ? U extends string ? U : never : never
 export type Number<T> = T extends infer U ? U extends number ? U : never : never
 
+export type Transformer<out T> = (input: string) => T
+
 export type Merge<A, B> =
 	& Omit<A, keyof B>
 	& {

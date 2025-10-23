@@ -813,6 +813,5 @@ Deno.test("parse npm-like command with scripts", async () => {
 
 	assertEquals(runPath, "run")
 	assertEquals(runData.arguments, ["build"])
-	// Raw contains everything after the first argument following --
 	assertEquals(runData.raw, "--verbose")
 })

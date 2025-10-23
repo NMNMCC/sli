@@ -1,14 +1,14 @@
 type Table = {
 	(
 		direction: "row",
-		rows: string[][],
+		rows: unknown[][],
 		indent: string,
 		gutter: string,
 		outdent: string,
 	): string
 	(
 		direction: "col",
-		cols: string[][],
+		cols: unknown[][],
 		indent: string,
 		gutter: string,
 		outdent: string,
@@ -17,7 +17,7 @@ type Table = {
 
 export const table: Table = (
 	dir: "col" | "row",
-	data: string[][],
+	data: unknown[][],
 	indent: string,
 	gutter: string,
 	outdent: string,
@@ -26,15 +26,17 @@ export const table: Table = (
 		return table("col", transpose(data), indent, gutter, outdent)
 	}
 
-	const rows = Math.max(...data.map(c => c.length))
+	const rows = Math.max(...data.map((c) => c.length))
 	const cols = data.length
-	const widths = data.map(c => Math.max(...c.map(cell => cell.length)))
+	const widths = data.map((c) =>
+		Math.max(...c.map((cell) => String(cell).length))
+	)
 
 	let out = ""
 	for (let i = 0; i < rows; i++) {
 		let row = indent
 		for (let j = 0; j < cols; j++) {
-			const cell = data[j][i]
+			const cell = String(data[j][i])
 
 			if (j < cols - 1) {
 				row += cell.padEnd(widths[j]) + gutter
@@ -47,6 +49,6 @@ export const table: Table = (
 	return out
 }
 
-const transpose = (matrix: string[][]): string[][] => {
+const transpose = <T>(matrix: T[][]): T[][] => {
 	return matrix[0].map((_, idx) => matrix.map((row) => row[idx]))
 }
