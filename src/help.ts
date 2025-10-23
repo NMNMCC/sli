@@ -1,94 +1,109 @@
 import {table} from "./table.ts"
-import type {Option} from "./option.ts"
-import type {Command, Subcommand} from "./command.ts"
-import type {Argument} from "./argument.ts"
-import type {Flag} from "./flag.ts"
+import type {Command} from "./command.ts"
 
-export function help<
-	const TSubCommands extends Record<string, Subcommand>,
-	const TFlags extends Record<string, Flag>,
-	const TOptions extends Record<string, Option<unknown>>,
-	const TArguments extends Argument<unknown>[],
+const fmt = (a: string): string =>
+	a.startsWith('-') ? a : a.length === 1 ? `-${a}` : `--${a}`
+
+const matches = (k: string, m?: Record<string, string>): string[] => {
+	const r = [`--${k}`]
+	if (!m) return r
+	Object.entries(m).forEach(([a, t]) => t === k && r.push(fmt(a)))
+	return r
+}
+
+export const help = <
+	const TCommand extends Command = Command,
 >(
 	title: string,
-	c: Command<TSubCommands, TFlags, TOptions, TArguments>,
-): string {
-	return [
-		title,
-		c.description,
-		"\n",
-		"subcommands" in c && c.subcommands &&
-		"Commands:\n" +
-			table(
-				"row",
-				Object.entries(c.subcommands).map<[string, string]>((
-					[key, value],
-				) => [
-					key,
-					value(
-						c.flags || {},
-						c.options || {},
-						...(c.arguments || []),
-					)
-						.description ||
-					"",
-				]),
-				"\t",
-				"\t",
-				"\t",
-			),
-		"flags" in c && c.flags &&
-		"Flags:\n" +
-			table(
-				"row",
-				Object.entries(c.flags).map<[string, string, string]>((
-					[key, value],
-				) => [
-					[
-						...Object.entries(c.alias?.flags ?? {}).filter((
-							[, value],
-						) => value === key).map(([key]) => `-${key}`),
-						`--${key}`,
-					].join(", "),
-					String(value.fallback),
-					value.description,
-				]),
-				"\t",
-				"\t",
-				"\t",
-			),
-		"options" in c && c.options &&
-		"Options:\n" +
-			table(
-				"row",
-				Object.entries(c.options).map<[string, string]>((
-					[key, value],
-				) => [
-					[
-						...Object.entries(c.alias?.options ?? {}).filter((
-							[, value],
-						) => value === key).map(([key]) => `-${key}`),
-						`--${key}`,
-					].join(", "),
-					(value as Option<unknown>).description,
-				]),
-				"\t",
-				"\t",
-				"\t",
-			),
-		"arguments" in c && c.arguments &&
-		"Arguments:\n" +
-			table(
-				"row",
-				(c.arguments as Argument<unknown>[]).map<
-					[string, string, string]
-				>((
-					value,
-					index,
-				) => [String(index), `<${value.name}>`, value.description]),
-				"\t",
-				"\t",
-				"\t",
-			),
-	].filter(Boolean).join("\n") + "\n"
+	cmd: TCommand,
+): string => {
+	const sections = []
+
+	sections.push(
+		cmd.description ? `${title}\n${cmd.description}\n` : `${title}\n`
+	)
+
+	if (cmd.commands && Object.keys(cmd.commands).length > 0) {
+		sections.push(
+			"Commands:\n" +
+				table(
+					"row",
+					Object.entries(cmd.commands).map(([k, v]) => {
+						const aliases = cmd.alias?.commands
+							? Object.entries(cmd.alias.commands)
+								.filter(([_, t]) => t === k)
+								.map(([a, _]) => a)
+							: []
+						const name = aliases.length > 0 ? `${k}, ${aliases.join(", ")}` : k
+						return [name, v.description || ""]
+					}),
+					"\t",
+					"\t",
+					"\t",
+				),
+		)
+	}
+
+	if (cmd.flags && Object.keys(cmd.flags).length > 0) {
+		sections.push(
+			"Flags:\n" +
+				table(
+					"row",
+					Object.entries(cmd.flags).map(([k, v]) => [
+						matches(k, cmd.alias?.flags).join(", "),
+						String(v.fallback),
+						v.description,
+					]),
+					"\t",
+					"\t",
+					"\t",
+				),
+		)
+	}
+
+	if (cmd.options && Object.keys(cmd.options).length > 0) {
+		sections.push(
+			"Options:\n" +
+				table(
+					"row",
+					Object.entries(cmd.options).map(([k, v]) => {
+						const m = matches(k, cmd.alias?.options)
+						let desc = v.description
+
+						if ('required' in v && v.required) desc += " <required>"
+
+						if ('fallback' in v && v.fallback !== undefined) {
+							const def = Array.isArray(v.fallback)
+								? v.fallback.join(", ")
+								: String(v.fallback)
+							desc += ` [default: ${def}]`
+						}
+
+						return [m.join(", "), desc, ""]
+					}),
+					"\t",
+					"\t",
+					"\t",
+				),
+		)
+	}
+
+	if (cmd.arguments && cmd.arguments.length > 0) {
+		sections.push(
+			"Arguments:\n" +
+				table(
+					"row",
+					cmd.arguments.map((v, i) => [
+						String(i + 1),
+						`<${v.name}>`,
+						v.description,
+					]),
+					"\t",
+					"\t",
+					"\t",
+				),
+		)
+	}
+
+	return sections.join("\n") + "\n"
 }
