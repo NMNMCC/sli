@@ -46,7 +46,7 @@ const helper = command({
 	}
 }
 
-type Context = [string, {
+export type Context = [string, {
 	flags: Record<string, boolean>
 	options: Record<string, unknown[]>
 	arguments: unknown[]

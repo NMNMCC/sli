@@ -1,6 +1,6 @@
 import {MissingRequiredParameter, parse} from "./parse.ts"
 import {command} from "./command.ts"
-import {assertEquals, assertRejects} from "@std/assert"
+import {assertEquals} from "@std/assert"
 import {help} from "./help.ts"
 
 Deno.test("parse without subcommand", async () => {
